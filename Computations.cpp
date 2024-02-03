@@ -25,38 +25,78 @@ vector<double> Computations::runAlgorithm() {
     // Build a linear reconstruction weight matrix for all points in the dataset based on their K-nearest neighbors
     // Initialize a sparse matrix of size SxS (s=samples) to be used as the weight matrix
     Eigen::SparseMatrix<double, Eigen::RowMajor> linear_weight_matrix(data_high_dim_.size(), data_high_dim_.size());
-    //linear_weight_matrix.reserve(k_neighbors_ * data_high_dim_.size());
+    linear_weight_matrix.reserve(k_neighbors_ * data_high_dim_.size());
     // Fill the linear weight matrix
     cout << "Computing linear reconstruction weights \n";
-    //buildLinearWeights(linear_weight_matrix);
+    buildLinearWeights(linear_weight_matrix);
     cout << endl;
     
     // Build a non-linear reconstruction weight matrix for all points in the dataset based on the linear reconstruction weights
     // Initialize a sparse matrix of size SxS to be used as the weight matrix
     Eigen::SparseMatrix<double, Eigen::RowMajor> poly_weight_matrix(data_high_dim_.size(), data_high_dim_.size());
-    //poly_weight_matrix.reserve(k_neighbors_ * data_high_dim_.size());
+    poly_weight_matrix.reserve(k_neighbors_ * data_high_dim_.size());
     // Fill the non-linear weight matrix
     cout << "Computing non-linear reconstruction weights \n";
-    //buildPolyWeights(linear_weight_matrix, poly_weight_matrix);
+    buildPolyWeights(linear_weight_matrix, poly_weight_matrix);
     cout << endl;
     //cout << poly_weight_matrix;
     //cout << endl << endl;
 
-    // Build a 3d matrix of Hadamard product from the P degree to the 1st degree for all points in the dataset
-    // Initialize a 3D matrix of size SxPxN to be used as the weight matrix
-    Eigen::Tensor<double, 3, Eigen::RowMajor> xp_3d_matrix;
-    xp_3d_matrix.resize(data_high_dim_.size(), n_features_, p_degree_);
+
+
+
+    // Build a flattened 3d matrix of Hadamard product from the P degree to the 1st degree for all points in the dataset
+    // Initialize a flattened 3D matrix of size SxP*N to be used as the weight matrix
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> xp_3d_matrix(data_high_dim_.size(), n_features_*p_degree_);
     // Fill the 3d Hadamard product matrix
     cout << "Generating X_p" << endl;
     buildXpMatrix(xp_3d_matrix);
     
-    cout << xp_3d_matrix << endl << endl;
+    cout << endl << xp_3d_matrix << endl << endl;
+
+    Eigen::MatrixXd eigvecs = solveEigenProblem(poly_weight_matrix, xp_3d_matrix);
+
+    cout << eigvecs << endl;
+    // // Build a 3d matrix of Hadamard product from the P degree to the 1st degree for all points in the dataset
+    // // Initialize a 3D matrix of size SxPxN to be used as the weight matrix
+    // Eigen::Tensor<double, 3, Eigen::RowMajor> xp_3d_matrix;
+    // xp_3d_matrix.resize(data_high_dim_.size(), n_features_, p_degree_);
+    // // Fill the 3d Hadamard product matrix
+    // cout << "Generating X_p" << endl;
+    // buildXpMatrix(xp_3d_matrix);
+    
+    // cout << xp_3d_matrix << endl << endl;
+
+
+
+
 
     return {0.0};
 }
 
+void Computations::mapLowDimension() {
+    
+}
+
+Eigen::MatrixXd Computations::solveEigenProblem(Eigen::SparseMatrix<double, Eigen::RowMajor>& poly_weight_matrix, 
+                                      Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix) {
+    // Create matrix D
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> D = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>::Identity(data_high_dim_.size(), data_high_dim_.size());
+    
+    // Create matrix A and B for the generalized eigenvalue problem
+    Eigen::MatrixXd A = xp_3d_matrix.transpose() * (D - poly_weight_matrix) * xp_3d_matrix;
+    Eigen::MatrixXd B = xp_3d_matrix.transpose() * D * xp_3d_matrix;
+    
+    // Solve the generalized eigenvalue problem 
+    Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> solver(A, B);
+    Eigen::VectorXd eigvals = solver.eigenvalues(); // Get the eigenvalues as a vector
+    Eigen::MatrixXd eigvecs = solver.eigenvectors(); // Get the eigenvectors as a matrix
+    
+    return eigvecs;
+}
+
 // Computes a matrix of Hadamard product from the P degree to the 1st degree for all points in the dataset
-void::Computations::buildXpMatrix(Eigen::Tensor<double, 3, Eigen::RowMajor>& xp_3d_matrix) {
+void Computations::buildXpMatrix(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix) {
     std::mutex mtx;
 
     // Declare some variables for the progress bar
@@ -66,8 +106,6 @@ void::Computations::buildXpMatrix(Eigen::Tensor<double, 3, Eigen::RowMajor>& xp_
 
     for (int i = 0; i < data_high_dim_.size(); i++) {
         int iter = 0;
-        Eigen::Tensor<double, 2, Eigen::RowMajor> m;
-        m.resize(p_degree_, n_features_);
         for (int p = p_degree_; p > 0; p--) {
             for (int j = 0; j < n_features_; j++) {
                 double x_i = data_high_dim_[i][j];
@@ -76,48 +114,54 @@ void::Computations::buildXpMatrix(Eigen::Tensor<double, 3, Eigen::RowMajor>& xp_
                 for (int k = p-1; k > 0; k--) {
                     x_i = x_i * x_i_initial;
                 }
-                m(iter, j) = x_i;
+                xp_3d_matrix(i, iter) = x_i;
+                iter++;
             }
-            iter++;
         }
-        //cout << m << endl << endl;;
-        xp_3d_matrix.chip(i, 0) = m;
-        //iter++;
-
         mtx.lock();
         // Update the progress bar
         current_progress++;
         print_progress_bar(current_progress, total_progress, start_time);
         mtx.unlock();
     }
-
-    // for (int i = 0; i < data_high_dim_.size(); i++) {
-    //     int iter = 0;
-    //     Eigen::Tensor<double, 2, Eigen::RowMajor> m;
-    //     m.resize(p_degree_, n_features_);
-    //     for (int p = p_degree_; p > 0; p--) {
-    //         for (int j = 0; j < n_features_; j++) {
-    //             double x_i = data_high_dim_[i][j];
-    //             double x_i_initial = data_high_dim_[i][j];
-    //             // Compute x_i to the p power
-    //             for (int k = p-1; k > 0; k--) {
-    //                 x_i = x_i * x_i_initial;
-    //             }
-    //             m(iter, j) = x_i;
-    //         }
-    //         iter++;
-    //     }
-    //     //cout << m << endl << endl;;
-    //     xp_3d_matrix.chip(i, 0) = m;
-    //     //iter++;
-
-    //     mtx.lock();
-    //     // Update the progress bar
-    //     current_progress++;
-    //     print_progress_bar(current_progress, total_progress, start_time);
-    //     mtx.unlock();
-    // }
 }
+
+// // Computes a matrix of Hadamard product from the P degree to the 1st degree for all points in the dataset
+// void Computations::buildXpMatrix(Eigen::Tensor<double, 3, Eigen::RowMajor>& xp_3d_matrix) {
+//     std::mutex mtx;
+
+//     // Declare some variables for the progress bar
+//     int total_progress = data_high_dim_.size();
+//     int current_progress = 0;
+//     std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();    
+    
+//     for (int i = 0; i < data_high_dim_.size(); i++) {
+//         int iter = 0;
+//         Eigen::Tensor<double, 2, Eigen::RowMajor> m;
+//         m.resize(p_degree_, n_features_);
+//         for (int p = p_degree_; p > 0; p--) {
+//             for (int j = 0; j < n_features_; j++) {
+//                 double x_i = data_high_dim_[i][j];
+//                 double x_i_initial = data_high_dim_[i][j];
+//                 // Compute x_i to the p power
+//                 for (int k = p-1; k > 0; k--) {
+//                     x_i = x_i * x_i_initial;
+//                 }
+//                 m(iter, j) = x_i;
+//             }
+//             iter++;
+//         }
+//         //cout << m << endl << endl;;
+//         xp_3d_matrix.chip(i, 0) = m;
+//         //iter++;
+
+//         mtx.lock();
+//         // Update the progress bar
+//         current_progress++;
+//         print_progress_bar(current_progress, total_progress, start_time);
+//         mtx.unlock();
+//     }
+// }
 
 // Computes the non-linear reconstruction weights for each data point from the linear reconstruction weights
 void Computations::buildPolyWeights(Eigen::SparseMatrix<double, Eigen::RowMajor>& linear_weight_matrix, 
