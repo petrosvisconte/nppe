@@ -14,6 +14,7 @@ class Computations {
        Computations(const vector<vector<double>>& data_high_dim, int k_neighbors, int p_degree, int n_features);
        vector<double> runAlgorithm();
     private:
+        void mapLowDimension(Eigen::MatrixXd eigvecs);
         Eigen::MatrixXd solveEigenProblem(Eigen::SparseMatrix<double, Eigen::RowMajor>& poly_weight_matrix, 
                                Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix);
         void buildXpMatrix(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix);
@@ -25,6 +26,7 @@ class Computations {
         double distanceEuclidean(const vector<double>& point_1, const vector<double>& point_2);
         void print_progress_bar(int current_progress, int total_progress, std::chrono::steady_clock::time_point start_time);
         vector<vector<double>> data_high_dim_;
+        vector<vector<double>> data_low_dim_;
         int k_neighbors_;
         int p_degree_;
         int n_features_;
