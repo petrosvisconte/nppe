@@ -40,28 +40,19 @@ vector<double> Computations::runAlgorithm() {
     buildPolyWeights(linear_weight_matrix, poly_weight_matrix);
     cout << endl;
     cout << poly_weight_matrix;
-    cout << endl << endl;
 
-    // Build a flattened 3d matrix of Hadamard product from the P degree to the 1st degree for all points in the dataset
-    // Initialize a flattened 3D matrix of size SxP*N to be used as the weight matrix
+    // Build a 2d matrix of Hadamard products from the P degree to the 1st degree for all points in the dataset
+    // Initialize a 2D matrix of size P*NxS to be used as the X_p matrix
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> xp_3d_matrix(data_high_dim_.size(), n_features_*p_degree_);
     // Fill the 3d Hadamard product matrix
     cout << "Generating X_p" << endl;
     buildXpMatrix(xp_3d_matrix);
     cout << endl;
 
-    //cout << eigvecs << endl;
-    // // Build a 3d matrix of Hadamard product from the P degree to the 1st degree for all points in the dataset
-    // // Initialize a 3D matrix of size SxPxN to be used as the weight matrix
-    // Eigen::Tensor<double, 3, Eigen::RowMajor> xp_3d_matrix;
-    // xp_3d_matrix.resize(data_high_dim_.size(), n_features_, p_degree_);
-    // // Fill the 3d Hadamard product matrix
-    // cout << "Generating X_p" << endl;
-    // buildXpMatrix(xp_3d_matrix);
     
     // Solve the generalized eigenvalue problem to obtain the eigenvectors for the m smallest eigenvalues 
     cout << "Solving generalized eigenvalue problem \n";
-    Eigen::MatrixXd eigvecs = solveEigenProblem(poly_weight_matrix, xp_3d_matrix);
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigvecs = solveEigenProblem(poly_weight_matrix, xp_3d_matrix);
 
     // Map each point in the dataset to its low dimensional representation
     //mapLowDimension(eigvecs);
@@ -70,7 +61,7 @@ vector<double> Computations::runAlgorithm() {
     return {0.0};
 }
 
-void Computations::mapLowDimension(Eigen::MatrixXd eigvecs) {
+void Computations::mapLowDimension(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigvecs) {
     data_low_dim_.reserve(data_high_dim_.size());
     
     for (int i = 0; i < data_high_dim_.size(); i++) {
@@ -81,7 +72,7 @@ void Computations::mapLowDimension(Eigen::MatrixXd eigvecs) {
 Eigen::MatrixXd Computations::solveEigenProblem(Eigen::SparseMatrix<double, Eigen::RowMajor>& poly_weight_matrix, 
                                       Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix) {
     // Create matrix D
-    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> D = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>::Identity(data_high_dim_.size(), data_high_dim_.size());
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> D = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>::Identity(data_high_dim_.size(), data_high_dim_.size());
     
     // Create matrix A and B for the generalized eigenvalue problem
     Eigen::MatrixXd A = xp_3d_matrix.transpose() * (D - poly_weight_matrix.transpose()) * xp_3d_matrix;
@@ -92,11 +83,16 @@ Eigen::MatrixXd Computations::solveEigenProblem(Eigen::SparseMatrix<double, Eige
     Eigen::VectorXd eigvals = solver.eigenvalues(); // Get the eigenvalues as a vector
     Eigen::MatrixXd eigvecs = solver.eigenvectors(); // Get the eigenvectors as a matrix
 
-    cout << A << endl << endl;
-    cout << std::boolalpha << A.isApprox(A.adjoint()) << endl << endl;
+    //cout << A << endl << endl;
+    //cout << std::boolalpha << A.isApprox(A.adjoint()) << endl << endl;
     //cout << B << endl << endl;
+    //cout << std::boolalpha << B.isApprox(B.adjoint()) << endl << endl;
+    //cout << B.eigenvalues() <<  endl << endl;
     //cout << eigvals << endl << endl;
     //cout << eigvecs << endl << endl;
+
+    cout << A * eigvecs.row(0).transpose() << endl << endl;
+    cout << eigvals.coeff(0) * B * eigvecs.row(0).transpose() << endl << endl;;
 
     // Find the m smallest eigenvalues that satisfy the constraint
     Eigen::VectorXd first_row = eigvecs.row(1);
@@ -108,16 +104,17 @@ Eigen::MatrixXd Computations::solveEigenProblem(Eigen::SparseMatrix<double, Eige
     //cout << first_row.transpose() << endl << endl;
 
     for (int i = 0; i < eigvals.size(); i++) {
-        Eigen::VectorXd first_row = eigvecs.row(i);
+        Eigen::Vector<double, Eigen::Dynamic> first_row = eigvecs.row(i);
         for (int j = 0; j < eigvals.size(); j++) {
-            Eigen::VectorXd row = eigvecs.row(j);
-            Eigen::MatrixXd constraint = first_row.transpose() * xp_3d_matrix.transpose() * D * xp_3d_matrix * row;
+            Eigen::Vector<double, Eigen::Dynamic> row = eigvecs.row(j);
+            Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> constraint = 
+                first_row.transpose() * xp_3d_matrix.transpose() * D * xp_3d_matrix * row;
             cout << constraint << ", ";
         }
         cout << endl;
     }
     cout << endl;
-    
+    cout << endl << eigvals.coeff(0) << endl;
     return eigvecs;
 }
 
@@ -151,43 +148,6 @@ void Computations::buildXpMatrix(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dy
         mtx.unlock();
     }
 }
-
-// // Computes a matrix of Hadamard product from the P degree to the 1st degree for all points in the dataset
-// void Computations::buildXpMatrix(Eigen::Tensor<double, 3, Eigen::RowMajor>& xp_3d_matrix) {
-//     std::mutex mtx;
-
-//     // Declare some variables for the progress bar
-//     int total_progress = data_high_dim_.size();
-//     int current_progress = 0;
-//     std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();    
-    
-//     for (int i = 0; i < data_high_dim_.size(); i++) {
-//         int iter = 0;
-//         Eigen::Tensor<double, 2, Eigen::RowMajor> m;
-//         m.resize(p_degree_, n_features_);
-//         for (int p = p_degree_; p > 0; p--) {
-//             for (int j = 0; j < n_features_; j++) {
-//                 double x_i = data_high_dim_[i][j];
-//                 double x_i_initial = data_high_dim_[i][j];
-//                 // Compute x_i to the p power
-//                 for (int k = p-1; k > 0; k--) {
-//                     x_i = x_i * x_i_initial;
-//                 }
-//                 m(iter, j) = x_i;
-//             }
-//             iter++;
-//         }
-//         //cout << m << endl << endl;;
-//         xp_3d_matrix.chip(i, 0) = m;
-//         //iter++;
-
-//         mtx.lock();
-//         // Update the progress bar
-//         current_progress++;
-//         print_progress_bar(current_progress, total_progress, start_time);
-//         mtx.unlock();
-//     }
-// }
 
 // Computes the non-linear reconstruction weights for each data point from the linear reconstruction weights
 void Computations::buildPolyWeights(Eigen::SparseMatrix<double, Eigen::RowMajor>& linear_weight_matrix, 
@@ -247,20 +207,20 @@ void Computations::buildPolyWeights(Eigen::SparseMatrix<double, Eigen::RowMajor>
     poly_weight_matrix.setFromTriplets(weight_list.begin(), weight_list.end());
 
 
-    // Normalize the weights
+    // Normalize the weights TODO: decide to normalize or not
     // Get the sum of each row
-    Eigen::SparseVector<double> rowsum;
-    for (int i = 0; i < poly_weight_matrix.rows(); i++) {
-        rowsum.coeffRef(i) = poly_weight_matrix.innerVector(i).sum();
-    }
-    // Divide each nonzero element by the sum of its corresponding row
-    for (int i = 0; i < poly_weight_matrix.rows(); i++) {
-        for (int j = 0; j < poly_weight_matrix.cols(); j++) {
-            if (poly_weight_matrix.coeffRef(i, j) != 0.0) {
-                poly_weight_matrix.coeffRef(i,j) = poly_weight_matrix.coeffRef(i,j) / rowsum.coeffRef(i);
-            }
-        }
-    }
+    // Eigen::Vector<double, Eigen::Dynamic> rowsum(data_high_dim_.size());
+    // for (int i = 0; i < poly_weight_matrix.rows(); i++) {
+    //     rowsum.coeffRef(i) = poly_weight_matrix.innerVector(i).sum();
+    // }
+    // // Divide each nonzero element by the sum of its corresponding row
+    // for (int i = 0; i < poly_weight_matrix.rows(); i++) {
+    //     for (int j = 0; j < poly_weight_matrix.cols(); j++) {
+    //         if (poly_weight_matrix.coeffRef(i, j) != 0.0) {
+    //             poly_weight_matrix.coeffRef(i,j) = poly_weight_matrix.coeffRef(i,j) / rowsum.coeffRef(i);
+    //         }
+    //     }
+    // }
 }
 
 // Computes the linear reconstruction weights for each data point from its K-nearest neighbors
@@ -281,14 +241,14 @@ void Computations::buildLinearWeights(Eigen::SparseMatrix<double, Eigen::RowMajo
     for (int i = 0; i < data_high_dim_.size(); i++) {
         // Get the K-nearest neighbors data for point i as a K x N matrix and the neighbor indices as a K column-vector
         MatrixPair neighbor_pair = nearestNeighbors(data_high_dim_[i], i);
-        Eigen::Matrix neighbor_matrix = neighbor_pair.x;
+        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> neighbor_matrix = neighbor_pair.x;
         Eigen::VectorXd neighbor_vector = neighbor_pair.y;
         
         // Initialize a K x N matrix where each row is the data for point i
         // Create a vector from the data for point i
         Eigen::VectorXd point_i = Eigen::Map<Eigen::VectorXd>(data_high_dim_[i].data(), n_features_);
         // Replicate the vector along the rows to create a K x N matrix
-        Eigen::MatrixXd i_matrix = point_i.transpose().replicate(k_neighbors_, 1);
+        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> i_matrix = point_i.transpose().replicate(k_neighbors_, 1);
 
         // Subtract the point i matrix from the neighbors matrix to center the data about the origin
         neighbor_matrix.noalias() = neighbor_matrix - i_matrix;
@@ -305,9 +265,9 @@ void Computations::buildLinearWeights(Eigen::SparseMatrix<double, Eigen::RowMajo
         Eigen::VectorXd col_vect_1 = Eigen::VectorXd::Ones(k_neighbors_);
         Eigen::VectorXd weights = neighbor_matrix.colPivHouseholderQr().solve(col_vect_1);
 
-        // Normalize the weights
-        double sum = weights.sum();
-        weights = weights / sum;
+        // Normalize the weights TODO: decide to normalize or not
+        // double sum = weights.sum();
+        // weights = weights / sum;
 
         // Lock the mutex to avoid data races when pushing back the triplets to the weight list
         mtx.lock();
@@ -343,7 +303,7 @@ MatrixPair Computations::nearestNeighbors(const vector<double>& point, int point
     sort(distances.begin(), distances.end(), compareDistances);
     // Initialize a matrix of size K x N as the data of the first K elements in the sorted vector of distances
     // Initialize a column-vector of size K storing the neighbor indices
-    Eigen::MatrixXd neighbor_matrix(k_neighbors_, n_features_);
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> neighbor_matrix(k_neighbors_, n_features_);
     Eigen::VectorXd neighbor_vector(k_neighbors_);
     for (int i = 0; i < k_neighbors_; i++) {
         neighbor_vector(i) = distances[i][1];

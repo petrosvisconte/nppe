@@ -14,7 +14,7 @@ class Computations {
        Computations(const vector<vector<double>>& data_high_dim, int k_neighbors, int p_degree, int n_features);
        vector<double> runAlgorithm();
     private:
-        void mapLowDimension(Eigen::MatrixXd eigvecs);
+        void mapLowDimension(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigvecs);
         Eigen::MatrixXd solveEigenProblem(Eigen::SparseMatrix<double, Eigen::RowMajor>& poly_weight_matrix, 
                                Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix);
         void buildXpMatrix(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix);
