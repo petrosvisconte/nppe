@@ -11,10 +11,14 @@ struct MatrixPair;
 
 class Computations {
     public:
-       Computations(const vector<vector<double>>& data_high_dim, int k_neighbors, int p_degree, int n_features);
-       vector<double> runAlgorithm();
+        Computations(const vector<vector<double>>& data_high_dim, int k_neighbors, int p_degree, int n_features);
+        vector<double> runAlgorithm();
+        void publicMapLowDimensionTest(const vector<vector<double>>& data_high_dim_test) {
+            mapLowDimensionTest(data_high_dim_test);
+        }
     private:
-        void mapLowDimension(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigvecs);
+        void mapLowDimensionTest(const vector<vector<double>>& data_high_dim_test);
+        void mapLowDimension(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix);
         Eigen::MatrixXd solveEigenProblem(Eigen::SparseMatrix<double, Eigen::RowMajor>& poly_weight_matrix, 
                                Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix);
         void buildXpMatrix(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix);
@@ -30,6 +34,7 @@ class Computations {
         int k_neighbors_;
         int p_degree_;
         int n_features_;
+        Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigvecs_;
 };
 bool compareDistances(const vector<double>& point_1, const vector<double>& point_2);
 

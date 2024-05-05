@@ -16,7 +16,10 @@ def swissRoll(s, n, h):
     fig = plt.figure()
     ax = fig.add_subplot(projection="3d")
     ax.scatter(sr_points[:, 0], sr_points[:, 1], sr_points[:, 2], c=sr_color, cmap="Spectral")
-    ax.set_title("Swiss Roll Dataset")
+    if h==True:
+        ax.set_title("Swiss Hole Dataset")
+    else:
+        ax.set_title("Swiss Roll Dataset")
     ax.view_init(azim=-66, elev=12)
     ax.text(-2, 0, 25, f"Number of samples: {s}", fontsize=9)
     ax.text(-2, 0, 28, f"Noise: {n}", fontsize=9)
@@ -36,6 +39,20 @@ def main():
     # create swissroll datasets with a hole
     swissRoll(2000, 0, True)
     swissRoll(2000,0.5, True)
+
+    # Generate a new testing set of 500 points
+    sr_points, sr_color = datasets.make_swiss_roll(n_samples=500, noise=0.5, hole=False, random_state=1)  # Use a different random state
+    # Plot the data
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    ax.scatter(sr_points[:, 0], sr_points[:, 1], sr_points[:, 2], c=sr_color, cmap="Spectral")
+    ax.set_title("Swiss Hole Dataset")
+    ax.view_init(azim=-66, elev=12)
+    ax.text(-2, 0, 25, f"Number of observations: {500}", fontsize=9)
+    ax.text(-2, 0, 28, f"Noise: {0.5}", fontsize=9)
+    plt.show()
+    # Write data to .csv
+    np.savetxt("datasets/swissroleh_test.csv", np.column_stack((sr_points,sr_color)), delimiter=",")
 
     (train_X, train_y), (test_X, test_y) = mnist.load_data()
     # create a DataFrame from the training set

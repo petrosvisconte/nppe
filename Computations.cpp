@@ -20,6 +20,12 @@ Computations::Computations(const vector<vector<double>>& data_high_dim, int k_ne
 
 // Runs the main algorithm logic
 vector<double> Computations::runAlgorithm() {
+    // for (int i = 0; i < data_high_dim_.size(); i++) {
+    //     for (int j = 0; j < n_features_; j++) {
+    //         cout << data_high_dim_[i][j] << " ";
+    //     }
+    //     cout << endl;
+    // }
     cout << "Running training phase: \n" << std::setprecision(15);
 
     // Build a linear reconstruction weight matrix for all points in the dataset based on their K-nearest neighbors
@@ -30,6 +36,7 @@ vector<double> Computations::runAlgorithm() {
     cout << "Computing linear reconstruction weights \n";
     buildLinearWeights(linear_weight_matrix);
     cout << endl;
+    //cout << linear_weight_matrix << endl;
     
     // Build a non-linear reconstruction weight matrix for all points in the dataset based on the linear reconstruction weights
     // Initialize a sparse matrix of size SxS to be used as the weight matrix
@@ -39,7 +46,7 @@ vector<double> Computations::runAlgorithm() {
     cout << "Computing non-linear reconstruction weights \n";
     buildPolyWeights(linear_weight_matrix, poly_weight_matrix);
     cout << endl;
-    cout << poly_weight_matrix;
+    //cout << poly_weight_matrix;
 
     // Build a 2d matrix of Hadamard products from the P degree to the 1st degree for all points in the dataset
     // Initialize a 2D matrix of size P*NxS to be used as the X_p matrix
@@ -52,21 +59,85 @@ vector<double> Computations::runAlgorithm() {
     
     // Solve the generalized eigenvalue problem to obtain the eigenvectors for the m smallest eigenvalues 
     cout << "Solving generalized eigenvalue problem \n";
-    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigvecs = solveEigenProblem(poly_weight_matrix, xp_3d_matrix);
+    eigvecs_ = solveEigenProblem(poly_weight_matrix, xp_3d_matrix);
+    
+    // Map each point in the dataset to its low dimensional representation and write output to file
+    cout << "Mapping data to low dimensional space" << endl;
+    mapLowDimension(xp_3d_matrix);
 
-    // Map each point in the dataset to its low dimensional representation
-    //mapLowDimension(eigvecs);
+    // Map each point in the testing set to its low dimensional representation and write output to file
+    //Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> phi_matrix_test(10, n_features_*p_degree_);
+    //buildXpMatrix(phi_matrix_test);
+    //mapLowDimension(eigvecs, phi_matrix_test);
 
 
     return {0.0};
 }
 
-void Computations::mapLowDimension(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigvecs) {
-    data_low_dim_.reserve(data_high_dim_.size());
-    
-    for (int i = 0; i < data_high_dim_.size(); i++) {
-
+void Computations::mapLowDimensionTest(const vector<vector<double>>& data_high_dim_test) {    
+    cout << "Mapping test data to low dimensional space" << endl;
+    // Create a file to write the low dimensional data to
+    string filename = "data/datasets/low_dim_test.csv";
+    std::ofstream file(filename);
+    if (file.fail()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return;
     }
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> phi_matrix(data_high_dim_test.size(), n_features_*p_degree_);
+    for (int i = 0; i < data_high_dim_test.size(); i++) {
+        int iter = 0;
+        for (int p = p_degree_; p > 0; p--) {
+            for (int j = 0; j < n_features_; j++) {
+                double x_i = data_high_dim_test[i][j];
+                double x_i_initial = data_high_dim_test[i][j];
+                // Compute x_i to the p power
+                for (int k = p-1; k > 0; k--) {
+                    x_i = x_i * x_i_initial;
+                }
+                phi_matrix(i, iter) = x_i;
+                iter++;
+            }
+        }
+    }
+    // Write the low dimensional data to the file
+    for (int i = 0; i < data_high_dim_test.size(); i++) {
+        Eigen::VectorXd point(n_features_);
+        for (int j = 0; j < 2; j++) { // TODO: update j < 2 to be a variable j < m, with m representing low dimensional space
+            //cout << eigvecs.row(j) << "  :  \n" << xp_3d_matrix.row(i).transpose() << endl;
+            point(j) = (eigvecs_.row(j) * phi_matrix.row(i).transpose())(0);
+            file << point(j) << ",";
+            //cout << endl << "point: " << point(j) << endl;
+        }
+        file << std::endl;
+    }
+    
+    // close the file
+    file.close();
+}
+
+void Computations::mapLowDimension(Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& xp_3d_matrix) {    
+    // Create a file to write the low dimensional data to
+    string filename = "data/datasets/low_dim.csv";
+    std::ofstream file(filename);
+    if (file.fail()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return;
+    }
+    
+    // Write the low dimensional data to the file
+    for (int i = 0; i < data_high_dim_.size(); i++) {
+        Eigen::VectorXd point(n_features_);
+        for (int j = 0; j < 2; j++) { // TODO: update j < 2 to be a variable j < m, with m representing low dimensional space
+            //cout << eigvecs.row(j) << "  :  \n" << xp_3d_matrix.row(i).transpose() << endl;
+            point(j) = (eigvecs_.row(j) * xp_3d_matrix.row(i).transpose())(0);
+            file << point(j) << ",";
+            //cout << endl << "point: " << point(j) << endl;
+        }
+        file << std::endl;
+    }
+    
+    // close the file
+    file.close();
 }
 
 Eigen::MatrixXd Computations::solveEigenProblem(Eigen::SparseMatrix<double, Eigen::RowMajor>& poly_weight_matrix, 
@@ -91,11 +162,11 @@ Eigen::MatrixXd Computations::solveEigenProblem(Eigen::SparseMatrix<double, Eige
     //cout << eigvals << endl << endl;
     //cout << eigvecs << endl << endl;
 
-    cout << A * eigvecs.row(0).transpose() << endl << endl;
-    cout << eigvals.coeff(0) * B * eigvecs.row(0).transpose() << endl << endl;;
+    //cout << A * eigvecs.row(0).transpose() << endl << endl;
+    //cout << eigvals.coeff(0) * B * eigvecs.row(0).transpose() << endl << endl;;
 
     // Find the m smallest eigenvalues that satisfy the constraint
-    Eigen::VectorXd first_row = eigvecs.row(1);
+    //Eigen::VectorXd first_row = eigvecs.row(1);
 
     //cout << first_row << endl << endl;
     //cout << xp_3d_matrix.transpose() << endl << endl;
@@ -109,12 +180,12 @@ Eigen::MatrixXd Computations::solveEigenProblem(Eigen::SparseMatrix<double, Eige
             Eigen::Vector<double, Eigen::Dynamic> row = eigvecs.row(j);
             Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> constraint = 
                 first_row.transpose() * xp_3d_matrix.transpose() * D * xp_3d_matrix * row;
-            cout << constraint << ", ";
+            //cout << constraint << ", ";
         }
-        cout << endl;
+        //cout << endl;
     }
-    cout << endl;
-    cout << endl << eigvals.coeff(0) << endl;
+    //cout << endl;
+    //cout << endl << eigvals.coeff(0) << endl;
     return eigvecs;
 }
 
@@ -207,18 +278,22 @@ void Computations::buildPolyWeights(Eigen::SparseMatrix<double, Eigen::RowMajor>
     poly_weight_matrix.setFromTriplets(weight_list.begin(), weight_list.end());
 
 
-    // Normalize the weights TODO: decide to normalize or not
-    // Get the sum of each row
+    //Normalize the weights TODO: decide to normalize or not
+    //Get the sum of each row
     // Eigen::Vector<double, Eigen::Dynamic> rowsum(data_high_dim_.size());
+    // #pragma omp parallel for
     // for (int i = 0; i < poly_weight_matrix.rows(); i++) {
     //     rowsum.coeffRef(i) = poly_weight_matrix.innerVector(i).sum();
     // }
     // // Divide each nonzero element by the sum of its corresponding row
+    // #pragma omp parallel for
     // for (int i = 0; i < poly_weight_matrix.rows(); i++) {
     //     for (int j = 0; j < poly_weight_matrix.cols(); j++) {
+    //         mtx.lock();
     //         if (poly_weight_matrix.coeffRef(i, j) != 0.0) {
     //             poly_weight_matrix.coeffRef(i,j) = poly_weight_matrix.coeffRef(i,j) / rowsum.coeffRef(i);
     //         }
+    //         mtx.unlock();
     //     }
     // }
 }
@@ -240,9 +315,11 @@ void Computations::buildLinearWeights(Eigen::SparseMatrix<double, Eigen::RowMajo
     #pragma omp parallel for
     for (int i = 0; i < data_high_dim_.size(); i++) {
         // Get the K-nearest neighbors data for point i as a K x N matrix and the neighbor indices as a K column-vector
-        MatrixPair neighbor_pair = nearestNeighbors(data_high_dim_[i], i);
+        MatrixPair neighbor_pair = nearestNeighbors(data_high_dim_[i], i); //TODO: return by reference
         Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> neighbor_matrix = neighbor_pair.x;
-        Eigen::VectorXd neighbor_vector = neighbor_pair.y;
+        Eigen::Vector<double, Eigen::Dynamic> neighbor_vector = neighbor_pair.y;
+        //cout << neighbor_matrix << endl;
+        //cout << neighbor_vector << endl;
         
         // Initialize a K x N matrix where each row is the data for point i
         // Create a vector from the data for point i
@@ -251,23 +328,28 @@ void Computations::buildLinearWeights(Eigen::SparseMatrix<double, Eigen::RowMajo
         Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> i_matrix = point_i.transpose().replicate(k_neighbors_, 1);
 
         // Subtract the point i matrix from the neighbors matrix to center the data about the origin
-        neighbor_matrix.noalias() = neighbor_matrix - i_matrix;
+        //neighbor_matrix = neighbor_matrix - i_matrix;
 
         // Compute the local covariance
         neighbor_matrix = neighbor_matrix * neighbor_matrix.transpose().eval();
         // Regularize the matrix if the local covariance is not full rank (when K>N)
         if (k_neighbors_ > n_features_) {
             double e = 0.001 * neighbor_matrix.trace();
-            neighbor_matrix = neighbor_matrix + Eigen::MatrixXd::Identity(k_neighbors_, k_neighbors_) * e;
+            neighbor_matrix = neighbor_matrix + 
+                Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>::Identity(k_neighbors_, k_neighbors_) * e;
         }
 
         // Solve the linear system for the weights
         Eigen::VectorXd col_vect_1 = Eigen::VectorXd::Ones(k_neighbors_);
         Eigen::VectorXd weights = neighbor_matrix.colPivHouseholderQr().solve(col_vect_1);
+        // Eigen::ColPivHouseholderQR<Eigen::MatrixXd> solver;
+        // solver.compute(neighbor_matrix.transpose() * neighbor_matrix);
+        // Eigen::VectorXd weights = solver.solve(col_vect_1);
+        // Eigen::VectorXd weights = neighbor_matrix.partialPivLu().solve(col_vect_1);
 
         // Normalize the weights TODO: decide to normalize or not
-        // double sum = weights.sum();
-        // weights = weights / sum;
+        double sum = weights.sum();
+        weights = weights / sum;
 
         // Lock the mutex to avoid data races when pushing back the triplets to the weight list
         mtx.lock();
