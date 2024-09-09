@@ -4,4 +4,4 @@
 ### Presentation
 [Link to PDF](presentation/presentation.pdf)
 ### Paper
-add links here
+[Link to PDF](paper/paper.pdf)
