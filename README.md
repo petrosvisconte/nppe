@@ -2,8 +2,8 @@ This project tackles the challenge of dimensionality in machine learning through
 ### Conference Poster
 ![poster](poster/poster.png) 
 [Link to PDF](poster/poster.pdf) 
-### Presentation
+### Academic Presentation
 [Link to PDF](presentation/presentation.pdf)
-### Paper
+### Reearch Paper
 [Link to PDF](paper/paper.pdf)
 
